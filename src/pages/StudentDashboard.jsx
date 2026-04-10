@@ -1,38 +1,37 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-
-const INITIAL_PROJECTS = [
-  {
-    id: 1,
-    title: "Smart Attendance System",
-    description: "Face-recognition enabled attendance workflow for classrooms.",
-    milestone: "Prototype Completed",
-    progress: 78,
-    media: "attendance-demo.mp4",
-    reviewed: true,
-  },
-  {
-    id: 2,
-    title: "Data Visualizer",
-    description: "Interactive dashboard for semester project outcomes.",
-    milestone: "Awaiting Feedback",
-    progress: 55,
-    media: "charts-screenshots.zip",
-    reviewed: false,
-  },
-];
+import { studentAPI } from "../api/api";
 
 function StudentDashboard({ theme, onToggleTheme }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const activeUser =
-    location.state?.user ||
-    {
-      name: "Arjun Kumar",
-      studentId: "240003001",
-    };
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const [projects, setProjects] = useState(INITIAL_PROJECTS);
+  const activeUser = location.state?.user;
+
+  useEffect(() => {
+    if (!activeUser) {
+      navigate("/");
+      return;
+    }
+
+    loadProjects();
+  }, [activeUser, navigate]);
+
+  const loadProjects = async () => {
+    try {
+      setLoading(true);
+      const data = await studentAPI.getProjects();
+      setProjects(data);
+    } catch (err) {
+      setError("Failed to load projects");
+      console.error("Load projects error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const dashboardStats = useMemo(() => {
     const total = projects.length;
@@ -43,21 +42,26 @@ function StudentDashboard({ theme, onToggleTheme }) {
     return { total, reviewed, pending, completion };
   }, [projects]);
 
-  const createProject = () => {
-    const newProject = {
-      id: Date.now(),
-      title: `New Project ${projects.length + 1}`,
-      description: "Add your project summary, milestone, and media uploads.",
-      milestone: "Planning",
-      progress: 0,
-      media: "No media uploaded",
-      reviewed: false,
-    };
+  const createProject = async () => {
+    try {
+      const newProject = {
+        title: `New Project ${projects.length + 1}`,
+        description: "Add your project summary, milestone, and media uploads.",
+        milestone: "Planning",
+        progress: 0,
+        media: "No media uploaded"
+      };
 
-    setProjects((prev) => [newProject, ...prev]);
+      const createdProject = await studentAPI.createProject(newProject);
+      setProjects((prev) => [createdProject, ...prev]);
+    } catch (err) {
+      setError("Failed to create project");
+      console.error("Create project error:", err);
+    }
   };
 
   const logout = () => {
+    localStorage.removeItem('token');
     navigate("/", { replace: true });
   };
 
@@ -119,25 +123,36 @@ function StudentDashboard({ theme, onToggleTheme }) {
         </div>
 
         <div className="project-list">
-          {projects.map((project) => (
-            <article key={project.id} className="student-card">
-              <div className="row-between">
-                <h3>{project.title}</h3>
-                <span className="status-tag">{project.milestone}</span>
-              </div>
-              <p>{project.description}</p>
-              <p>
-                <strong>Media Upload:</strong> {project.media}
-              </p>
-              <div className="progress-wrap">
-                <div
-                  className="progress-fill"
-                  style={{ width: `${project.progress}%` }}
-                />
-              </div>
-              <p className="progress-label">Progress: {project.progress}%</p>
-            </article>
-          ))}
+          {loading ? (
+            <p>Loading projects...</p>
+          ) : error ? (
+            <p className="error-text">{error}</p>
+          ) : projects.length === 0 ? (
+            <p>No projects yet. Create your first project!</p>
+          ) : (
+            projects.map((project) => (
+              <article key={project._id} className="student-card">
+                <div className="row-between">
+                  <h3>{project.title}</h3>
+                  <span className="status-tag">{project.milestone}</span>
+                </div>
+                <p>{project.description}</p>
+                <p>
+                  <strong>Media Upload:</strong> {project.media}
+                </p>
+                <div className="progress-wrap">
+                  <div
+                    className="progress-fill"
+                    style={{ width: `${project.progress}%` }}
+                  />
+                </div>
+                <p className="progress-label">Progress: {project.progress}%</p>
+                {project.reviewed && (
+                  <p className="text-success">✓ Reviewed</p>
+                )}
+              </article>
+            ))
+          )}
         </div>
       </section>
     </div>

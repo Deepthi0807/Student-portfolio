@@ -1,65 +1,81 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-
-const INITIAL_STUDENTS = [
-  {
-    id: "240003001",
-    name: "Arjun Kumar",
-    email: "arjun.kumar@university.edu",
-    projects: 2,
-    reviewed: 1,
-    pending: 1,
-  },
-  {
-    id: "240003002",
-    name: "Priya Sharma",
-    email: "priya.sharma@university.edu",
-    projects: 3,
-    reviewed: 2,
-    pending: 1,
-  },
-  {
-    id: "240003003",
-    name: "Rahul Patel",
-    email: "rahul.patel@university.edu",
-    projects: 4,
-    reviewed: 3,
-    pending: 1,
-  },
-  {
-    id: "240003004",
-    name: "Ananya Singh",
-    email: "ananya.singh@university.edu",
-    projects: 2,
-    reviewed: 1,
-    pending: 1,
-  },
-];
+import { adminAPI } from "../api/api";
 
 function AdminDashboard({ theme, onToggleTheme }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [query, setQuery] = useState("");
+  const [students, setStudents] = useState([]);
   const [feedbackMap, setFeedbackMap] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
   const activeUser = location.state?.user;
+
+  useEffect(() => {
+    if (!activeUser) {
+      navigate("/");
+      return;
+    }
+
+    loadStudents();
+  }, [activeUser, navigate]);
+
+  const loadStudents = async () => {
+    try {
+      setLoading(true);
+      const data = await adminAPI.getStudents();
+      setStudents(data);
+    } catch (err) {
+      setError("Failed to load students");
+      console.error("Load students error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredStudents = useMemo(() => {
     if (!query.trim()) {
-      return INITIAL_STUDENTS;
+      return students;
     }
 
-    return INITIAL_STUDENTS.filter((student) => student.id.includes(query.trim()));
-  }, [query]);
+    // For now, filter locally. In a real app, you might want to search server-side
+    return students.filter((student) =>
+      student.id.toLowerCase().includes(query.toLowerCase()) ||
+      student.name.toLowerCase().includes(query.toLowerCase())
+    );
+  }, [query, students]);
 
-  const saveFeedback = (studentId) => {
+  const saveFeedback = async (studentId) => {
     const value = feedbackMap[studentId];
     if (!value?.trim()) {
       return;
     }
-    alert(`Feedback saved for ${studentId}: ${value}`);
+
+    try {
+      // For demo purposes, we'll add feedback to the first unreviewed project
+      // In a real app, you'd have a modal to select which project
+      const studentProjects = await adminAPI.getStudentProjects(studentId);
+      const unreviewedProject = studentProjects.find(p => !p.reviewed);
+
+      if (unreviewedProject) {
+        await adminAPI.addFeedback(unreviewedProject._id, value);
+        alert(`Feedback saved for ${studentId}: ${value}`);
+        setFeedbackMap((prev) => ({ ...prev, [studentId]: "" }));
+        // Reload students to update stats
+        loadStudents();
+      } else {
+        alert("No unreviewed projects found for this student");
+      }
+    } catch (err) {
+      alert("Failed to save feedback");
+      console.error("Save feedback error:", err);
+    }
   };
 
   const logout = () => {
+    localStorage.removeItem('token');
     navigate("/", { replace: true });
   };
 
@@ -96,57 +112,61 @@ function AdminDashboard({ theme, onToggleTheme }) {
         </div>
 
         <div className="student-grid">
-          {filteredStudents.length === 0 && (
+          {loading ? (
+            <p>Loading students...</p>
+          ) : error ? (
+            <p className="error-text">{error}</p>
+          ) : filteredStudents.length === 0 ? (
             <p className="empty-text">No students found for this ID.</p>
+          ) : (
+            filteredStudents.map((student) => {
+              const progress = student.projects === 0 ? 0 : Math.round((student.reviewed / student.projects) * 100);
+              return (
+                <article key={student.id} className="student-card">
+                  <div className="row-between">
+                    <h3>{student.name}</h3>
+                    <span className="id-pill">{student.id}</span>
+                  </div>
+
+                  <p>{student.email}</p>
+
+                  <div className="metric-row">
+                    <span>Projects</span>
+                    <strong>{student.projects}</strong>
+                  </div>
+                  <div className="metric-row">
+                    <span>Reviewed</span>
+                    <strong className="text-success">{student.reviewed}</strong>
+                  </div>
+                  <div className="metric-row">
+                    <span>Pending</span>
+                    <strong className="text-warning">{student.pending}</strong>
+                  </div>
+                  <div className="metric-row">
+                    <span>Progress</span>
+                    <strong>{progress}%</strong>
+                  </div>
+
+                  <div className="progress-wrap">
+                    <div className="progress-fill" style={{ width: `${progress}%` }} />
+                  </div>
+
+                  <textarea
+                    rows="2"
+                    placeholder="Add feedback"
+                    value={feedbackMap[student.id] || ""}
+                    onChange={(event) =>
+                      setFeedbackMap((prev) => ({
+                        ...prev,
+                        [student.id]: event.target.value,
+                      }))
+                    }
+                  />
+                  <button onClick={() => saveFeedback(student.id)}>Save Feedback</button>
+                </article>
+              );
+            })
           )}
-
-          {filteredStudents.map((student) => {
-            const progress = Math.round((student.reviewed / student.projects) * 100);
-            return (
-              <article key={student.id} className="student-card">
-                <div className="row-between">
-                  <h3>{student.name}</h3>
-                  <span className="id-pill">{student.id}</span>
-                </div>
-
-                <p>{student.email}</p>
-
-                <div className="metric-row">
-                  <span>Projects</span>
-                  <strong>{student.projects}</strong>
-                </div>
-                <div className="metric-row">
-                  <span>Reviewed</span>
-                  <strong className="text-success">{student.reviewed}</strong>
-                </div>
-                <div className="metric-row">
-                  <span>Pending</span>
-                  <strong className="text-warning">{student.pending}</strong>
-                </div>
-                <div className="metric-row">
-                  <span>Progress</span>
-                  <strong>{progress}%</strong>
-                </div>
-
-                <div className="progress-wrap">
-                  <div className="progress-fill" style={{ width: `${progress}%` }} />
-                </div>
-
-                <textarea
-                  rows="2"
-                  placeholder="Add feedback"
-                  value={feedbackMap[student.id] || ""}
-                  onChange={(event) =>
-                    setFeedbackMap((prev) => ({
-                      ...prev,
-                      [student.id]: event.target.value,
-                    }))
-                  }
-                />
-                <button onClick={() => saveFeedback(student.id)}>Save Feedback</button>
-              </article>
-            );
-          })}
         </div>
       </section>
     </div>

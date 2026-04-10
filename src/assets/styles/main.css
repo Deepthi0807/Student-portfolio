@@ -38,6 +38,26 @@ html[data-theme="dark"] {
   margin-top: 0;
 }
 
+.auth-switch {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.switch-btn {
+  margin-top: 0;
+  background: var(--surface-soft);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.switch-btn.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
 body {
   margin: 0;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
@@ -120,6 +140,12 @@ button:hover {
 .error-text {
   margin-top: 10px;
   color: #e24b4b;
+  font-size: 13px;
+}
+
+.success-text {
+  margin-top: 10px;
+  color: var(--success);
   font-size: 13px;
 }
 
