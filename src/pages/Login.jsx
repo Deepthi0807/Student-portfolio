@@ -1,32 +1,26 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-
-const USERS_KEY = "portalUsers";
+import { authAPI } from "../api/api";
 
 function Login({ theme, onToggleTheme }) {
   const navigate = useNavigate();
   const [mode, setMode] = useState("login");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [loginForm, setLoginForm] = useState({ username: "", password: "" });
+  const [loading, setLoading] = useState(false);
+
+  const [loginForm, setLoginForm] = useState({
+    username: "",
+    password: "",
+  });
+
   const [registerForm, setRegisterForm] = useState({
+    name: "",
+    email: "",
     username: "",
     password: "",
     confirmPassword: "",
   });
-
-  const registeredUsers = useMemo(() => {
-    const rawUsers = localStorage.getItem(USERS_KEY);
-    if (!rawUsers) {
-      return [];
-    }
-    try {
-      const parsed = JSON.parse(rawUsers);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }, [mode]);
 
   const handleLoginChange = (event) => {
     const { name, value } = event.target;
@@ -38,7 +32,8 @@ function Login({ theme, onToggleTheme }) {
     setRegisterForm((previous) => ({ ...previous, [name]: value }));
   };
 
-  const handleLogin = () => {
+  // ── LOGIN ──────────────────────────────────────────────
+  const handleLogin = async () => {
     const username = loginForm.username.trim();
     const password = loginForm.password.trim();
 
@@ -48,68 +43,64 @@ function Login({ theme, onToggleTheme }) {
       return;
     }
 
-    const user = registeredUsers.find(
-      (savedUser) => savedUser.username === username && savedUser.password === password
-    );
-
-    if (!user) {
-      setError("Invalid credentials. Please register first.");
-      setSuccess("");
-      return;
-    }
-
+    setLoading(true);
     setError("");
-    setSuccess("");
-    const route = user.role === "admin" ? "/admin" : "/student";
-    navigate(route, { state: { user } });
+
+    try {
+      const response = await authAPI.login({ username, password });
+
+      localStorage.setItem("token", response.token);
+
+      const route = response.user.role === "admin" ? "/admin" : "/student";
+      navigate(route, { state: { user: response.user } });
+    } catch (err) {
+      setError(err.message || "Login failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleRegister = () => {
+  // ── REGISTER ───────────────────────────────────────────
+  const handleRegister = async () => {
+    const name = registerForm.name.trim();
+    const email = registerForm.email.trim();
     const username = registerForm.username.trim();
     const password = registerForm.password.trim();
     const confirmPassword = registerForm.confirmPassword.trim();
 
-    if (!username || !password || !confirmPassword) {
-      setError("Please complete all register fields.");
+    if (!name || !email || !username || !password || !confirmPassword) {
+      setError("Please fill in all fields.");
       setSuccess("");
       return;
     }
 
     if (password !== confirmPassword) {
-      setError("Password and confirm password do not match.");
+      setError("Passwords do not match.");
       setSuccess("");
       return;
     }
 
-    const existingUser = registeredUsers.find(
-      (savedUser) => savedUser.username === username
-    );
-    if (existingUser) {
-      setError("Username already exists. Please choose another.");
-      setSuccess("");
-      return;
-    }
-
-    const role = username.toLowerCase().includes("admin") ? "admin" : "student";
-    const studentId =
-      role === "student"
-        ? `240003${String(registeredUsers.length + 1).padStart(3, "0")}`
-        : undefined;
-
-    const newUser = {
-      username,
-      password,
-      role,
-      name: username,
-      studentId,
-    };
-    localStorage.setItem(USERS_KEY, JSON.stringify([...registeredUsers, newUser]));
-
+    setLoading(true);
     setError("");
-    setSuccess("Registration successful. You can now sign in.");
-    setMode("login");
-    setRegisterForm({ username: "", password: "", confirmPassword: "" });
-    setLoginForm({ username, password: "" });
+
+    try {
+      await authAPI.register({ name, email, username, password, confirmPassword });
+
+      setSuccess("Registration successful! You can now sign in.");
+      setMode("login");
+      setRegisterForm({
+        name: "",
+        email: "",
+        username: "",
+        password: "",
+        confirmPassword: "",
+      });
+      setLoginForm({ username, password: "" });
+    } catch (err) {
+      setError(err.message || "Registration failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -120,9 +111,11 @@ function Login({ theme, onToggleTheme }) {
             {theme === "dark" ? "Light" : "Dark"}
           </button>
         </div>
+
         <h2>Project Portfolio Portal</h2>
         <p className="auth-subtitle">Use login or register below</p>
 
+        {/* Tab Switch */}
         <div className="auth-switch">
           <button
             className={`switch-btn ${mode === "login" ? "active" : ""}`}
@@ -146,6 +139,7 @@ function Login({ theme, onToggleTheme }) {
           </button>
         </div>
 
+        {/* Login Form */}
         {mode === "login" ? (
           <>
             <input
@@ -161,15 +155,31 @@ function Login({ theme, onToggleTheme }) {
               type="password"
               placeholder="Password"
             />
-            <button onClick={handleLogin}>Sign In</button>
+            <button onClick={handleLogin} disabled={loading}>
+              {loading ? "Signing in..." : "Sign In"}
+            </button>
           </>
         ) : (
+          /* Register Form */
           <>
+            <input
+              name="name"
+              value={registerForm.name}
+              onChange={handleRegisterChange}
+              placeholder="Full Name (e.g. Arjun Kumar)"
+            />
+            <input
+              name="email"
+              value={registerForm.email}
+              onChange={handleRegisterChange}
+              type="email"
+              placeholder="Email (e.g. arjun@example.com)"
+            />
             <input
               name="username"
               value={registerForm.username}
               onChange={handleRegisterChange}
-              placeholder="Username"
+              placeholder="Username (include 'admin' for admin role)"
             />
             <input
               name="password"
@@ -185,7 +195,9 @@ function Login({ theme, onToggleTheme }) {
               type="password"
               placeholder="Confirm Password"
             />
-            <button onClick={handleRegister}>Register</button>
+            <button onClick={handleRegister} disabled={loading}>
+              {loading ? "Registering..." : "Register"}
+            </button>
           </>
         )}
 
