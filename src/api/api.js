@@ -1,4 +1,4 @@
-const API_BASE_URL = 'https://backend_for_fsad_student_portfolio.up.railway.app/api';
+const API_BASE_URL = 'https://backendforfsadstudentportfolio-production.up.railway.app/api';
 
 // Helper to get token from localStorage
 const getToken = () => localStorage.getItem('token');
