@@ -19,9 +19,7 @@ const apiRequest = async (endpoint, options = {}) => {
   try {
     response = await fetch(`${API_BASE_URL}${endpoint}`, config);
   } catch (error) {
-    throw new Error(
-      "Failed to fetch. Backend not reachable at http://localhost:8080"
-    );
+    throw new Error(`Failed to fetch. Backend not reachable at ${API_BASE_URL}`);
   }
 
   if (!response.ok) {
