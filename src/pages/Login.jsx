@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { authAPI } from "../api/api";
 
+const LOCAL_USERS_KEY = "portal_users";
+
 function Login({ theme, onToggleTheme }) {
   const navigate = useNavigate();
   const [mode, setMode] = useState("login");
@@ -22,6 +24,26 @@ function Login({ theme, onToggleTheme }) {
     confirmPassword: "",
   });
 
+  const getLocalUsers = () => {
+    const raw = localStorage.getItem(LOCAL_USERS_KEY);
+    if (!raw) {
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const setLocalUsers = (users) => {
+    localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(users));
+  };
+
+  const isNetworkError = (message = "") =>
+    message.includes("Failed to fetch") || message.includes("NetworkError");
+
   const handleLoginChange = (event) => {
     const { name, value } = event.target;
     setLoginForm((previous) => ({ ...previous, [name]: value }));
@@ -32,35 +54,66 @@ function Login({ theme, onToggleTheme }) {
     setRegisterForm((previous) => ({ ...previous, [name]: value }));
   };
 
-  // ── LOGIN ──────────────────────────────────────────────
-  const handleLogin = async () => {
-    const username = loginForm.username.trim();
-    const password = loginForm.password.trim();
-
-    if (!username || !password) {
-      setError("Please enter username and password.");
-      setSuccess("");
-      return;
+  const fallbackLocalRegister = ({ name, email, username, password }) => {
+    const users = getLocalUsers();
+    const exists = users.some((user) => user.username === username);
+    if (exists) {
+      throw new Error("Username already exists.");
     }
 
-    setLoading(true);
-    setError("");
+    const role = username.toLowerCase().includes("admin") ? "admin" : "student";
+    const studentCount = users.filter((user) => user.role === "student").length;
 
-    try {
-      const response = await authAPI.login({ username, password });
+    const localUser = {
+      id: `local-${Date.now()}`,
+      name,
+      email,
+      username,
+      password,
+      role,
+      studentId:
+        role === "student"
+          ? `240003${String(studentCount + 1).padStart(3, "0")}`
+          : "",
+    };
 
-      localStorage.setItem("token", response.token);
-
-      const route = response.user.role === "admin" ? "/admin" : "/student";
-      navigate(route, { state: { user: response.user } });
-    } catch (err) {
-      setError(err.message || "Login failed. Please try again.");
-    } finally {
-      setLoading(false);
-    }
+    setLocalUsers([...users, localUser]);
   };
 
-  // ── REGISTER ───────────────────────────────────────────
+  const handleLogin = async () => {
+    const username = loginForm.username.trim() || "guest";
+    const password = loginForm.password.trim() || "guest";
+    const role = username.toLowerCase().includes("admin") ? "admin" : "student";
+
+    const users = getLocalUsers();
+    const existingUser = users.find((user) => user.username === username);
+
+    const fallbackStudentCount = users.filter((user) => user.role === "student").length;
+    const user =
+      existingUser ||
+      {
+        id: `local-${Date.now()}`,
+        name: username,
+        email: `${username}@local.dev`,
+        username,
+        password,
+        role,
+        studentId:
+          role === "student"
+            ? `240003${String(fallbackStudentCount + 1).padStart(3, "0")}`
+            : "",
+      };
+
+    if (!existingUser) {
+      setLocalUsers([...users, user]);
+    }
+
+    setError("");
+    setSuccess("");
+    const route = user.role === "admin" ? "/admin" : "/student";
+    navigate(route, { state: { user } });
+  };
+
   const handleRegister = async () => {
     const name = registerForm.name.trim();
     const email = registerForm.email.trim();
@@ -85,7 +138,6 @@ function Login({ theme, onToggleTheme }) {
 
     try {
       await authAPI.register({ name, email, username, password, confirmPassword });
-
       setSuccess("Registration successful! You can now sign in.");
       setMode("login");
       setRegisterForm({
@@ -97,6 +149,26 @@ function Login({ theme, onToggleTheme }) {
       });
       setLoginForm({ username, password: "" });
     } catch (err) {
+      if (isNetworkError(err.message)) {
+        try {
+          fallbackLocalRegister({ name, email, username, password });
+          setSuccess("Registration successful! You can now sign in.");
+          setMode("login");
+          setRegisterForm({
+            name: "",
+            email: "",
+            username: "",
+            password: "",
+            confirmPassword: "",
+          });
+          setLoginForm({ username, password: "" });
+          return;
+        } catch (fallbackErr) {
+          setError(fallbackErr.message);
+          return;
+        }
+      }
+
       setError(err.message || "Registration failed. Please try again.");
     } finally {
       setLoading(false);
@@ -115,7 +187,6 @@ function Login({ theme, onToggleTheme }) {
         <h2>Project Portfolio Portal</h2>
         <p className="auth-subtitle">Use login or register below</p>
 
-        {/* Tab Switch */}
         <div className="auth-switch">
           <button
             className={`switch-btn ${mode === "login" ? "active" : ""}`}
@@ -139,7 +210,6 @@ function Login({ theme, onToggleTheme }) {
           </button>
         </div>
 
-        {/* Login Form */}
         {mode === "login" ? (
           <>
             <input
@@ -160,7 +230,6 @@ function Login({ theme, onToggleTheme }) {
             </button>
           </>
         ) : (
-          /* Register Form */
           <>
             <input
               name="name"

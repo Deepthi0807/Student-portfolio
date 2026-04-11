@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://backendforfsadstudentportfolio-production.up.railway.app/api';
+const API_BASE_URL = 'http://localhost:8080/api';
 
 // Helper to get token from localStorage
 const getToken = () => localStorage.getItem('token');
@@ -15,7 +15,14 @@ const apiRequest = async (endpoint, options = {}) => {
     ...options,
   };
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+  } catch (error) {
+    throw new Error(
+      "Failed to fetch. Backend not reachable at http://localhost:8080"
+    );
+  }
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Network error' }));
