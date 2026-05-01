@@ -1,25 +1,31 @@
 import { useMemo, useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { adminAPI } from "../api/api";
+import { adminAPI, authAPI } from "../api/api";
 
 function AdminDashboard({ theme, onToggleTheme }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [query, setQuery] = useState("");
   const [students, setStudents] = useState([]);
+  const [activeUser, setActiveUser] = useState(location.state?.user || null);
   const [feedbackMap, setFeedbackMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const activeUser = location.state?.user;
-
   useEffect(() => {
-    if (!activeUser) {
-      navigate("/");
-      return;
-    }
+    const initDashboard = async () => {
+      const user = activeUser || (await authAPI.getCurrentUser());
 
-    loadStudents();
+      if (!user || user.role !== "admin") {
+        navigate("/");
+        return;
+      }
+
+      setActiveUser(user);
+      loadStudents();
+    };
+
+    initDashboard();
   }, [activeUser, navigate]);
 
   const loadStudents = async () => {
@@ -75,7 +81,7 @@ function AdminDashboard({ theme, onToggleTheme }) {
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
+    authAPI.logout();
     navigate("/", { replace: true });
   };
 

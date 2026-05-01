@@ -1,23 +1,29 @@
 import { useMemo, useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { studentAPI } from "../api/api";
+import { authAPI, studentAPI } from "../api/api";
 
 function StudentDashboard({ theme, onToggleTheme }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [projects, setProjects] = useState([]);
+  const [activeUser, setActiveUser] = useState(location.state?.user || null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const activeUser = location.state?.user;
-
   useEffect(() => {
-    if (!activeUser) {
-      navigate("/");
-      return;
-    }
+    const initDashboard = async () => {
+      const user = activeUser || (await authAPI.getCurrentUser());
 
-    loadProjects();
+      if (!user || user.role !== "student") {
+        navigate("/");
+        return;
+      }
+
+      setActiveUser(user);
+      loadProjects();
+    };
+
+    initDashboard();
   }, [activeUser, navigate]);
 
   const loadProjects = async () => {
@@ -61,7 +67,7 @@ function StudentDashboard({ theme, onToggleTheme }) {
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
+    authAPI.logout();
     navigate("/", { replace: true });
   };
 
